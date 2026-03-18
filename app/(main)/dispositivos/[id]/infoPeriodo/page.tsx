@@ -134,9 +134,11 @@ export default function PageInfoPeriodoDispositivo() {
     useEffect(() => {
         if (!dispositivo?.dev_num_ser) return
 
+        const devNumSer = dispositivo.dev_num_ser
+
         async function fetchLectura() {
             try {
-                const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/response/consultarLecturaRecientePorDevice/${dispositivo.dev_num_ser}`, {
+                const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/response/consultarLecturaRecientePorDevice/${devNumSer}`, {
                     method: 'GET',
                     credentials: 'include'
                 })
@@ -162,7 +164,7 @@ export default function PageInfoPeriodoDispositivo() {
 
         async function fetchLecturasDispositivio() {
             try {
-                const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/response//obtenerLecturasPorEUI/${dispositivo.dev_num_ser}`, {
+                const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/response//obtenerLecturasPorEUI/${devNumSer}`, {
                     method: 'GET',
                     credentials: 'include'
                 })
