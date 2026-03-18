@@ -4,33 +4,89 @@ import { useUser } from "@/contextApi/context-auth";
 import { Dispositivo } from "@/zod/device-schema";
 import { Lectura } from "@/zod/sensorReading-schema";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import Image from "next/image"
 import { Label } from "@/components/ui/label";
 import { convertirFechaConHora } from "@/lib/utils";
 import { BarChartConsumo } from "@/components/graficos/barChartConsumo";
 
-export default function PageInfoCompletaDispositivo() {
+function normalizarFecha(fecha: Date) {
+    const f = new Date(fecha);
+    f.setHours(0, 0, 0, 0);
+    return f;
+}
 
+function obtenerRangoUltimos30Dias() {
+    const hoy = normalizarFecha(new Date());
+    const inicio = new Date(hoy);
+    inicio.setDate(hoy.getDate() - 29);
+
+    return { inicio, fin: hoy };
+}
+
+function filtrarLecturasUltimos30Dias(lecturas: Lectura[]) {
+    const { inicio, fin } = obtenerRangoUltimos30Dias();
+
+    return lecturas.filter((lectura) => {
+        if (!lectura.received_at) return false;
+        const fecha = normalizarFecha(new Date(lectura.received_at));
+        return fecha >= inicio && fecha <= fin;
+    });
+}
+
+function obtenerConsumoUltimos30Dias(lecturas: Lectura[]) {
+    const lecturasFiltradas = filtrarLecturasUltimos30Dias(lecturas)
+        .filter((l) => l.received_at && l.cumulative_water_volume != null)
+        .sort((a, b) => {
+            const fa = a.received_at ? new Date(a.received_at).getTime() : 0;
+            const fb = b.received_at ? new Date(b.received_at).getTime() : 0;
+            return fa - fb;
+        });
+
+    if (lecturasFiltradas.length < 2) return 0;
+
+    const primera = lecturasFiltradas[0];
+    const ultima = lecturasFiltradas[lecturasFiltradas.length - 1];
+
+    const volInicial = primera.cumulative_water_volume ?? 0;
+    const volFinal = ultima.cumulative_water_volume ?? 0;
+
+    return volFinal - volInicial;
+}
+
+function obtenerTextoRangoUltimos30Dias() {
+    const { inicio, fin } = obtenerRangoUltimos30Dias();
+
+    const textoInicio = inicio.toLocaleDateString("es-MX", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+    });
+
+    const textoFin = fin.toLocaleDateString("es-MX", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+    });
+
+    return `Del ${textoInicio} al ${textoFin}`;
+}
+
+export default function PageInfoCompletaDispositivo() {
     const { id } = useParams()
     const idNumber = id ? Number(id) : undefined
     const { clearUser } = useUser()
 
-    // states de almacenamiento
     const [dispositivo, setDispositivo] = useState<Dispositivo | undefined>(undefined)
     const [lectura, setLectura] = useState<Lectura | undefined>(undefined)
     const [lecturas, setLecturas] = useState<Lectura[]>([])
-    const [consumoMes, setConsumoMes] = useState(0)
 
-    // states de carga
     const [loadingDispositivo, setLoadingDipositivo] = useState(true)
     const [loadingRespuesta, setLoadingRespuesta] = useState(true)
     const [loadingLecturas, setLoadingLecturas] = useState(true)
 
     useEffect(() => {
-
-        // fecth para obtener el dispositivo por id
         async function fetchDispositivo() {
             try {
                 const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/device/obtenerDispositivo/${idNumber}`, {
@@ -54,20 +110,19 @@ export default function PageInfoCompletaDispositivo() {
 
             } catch (error) {
                 console.log(error)
+                setLoadingDipositivo(false)
             }
         }
+
         fetchDispositivo()
-    }, [])
+    }, [idNumber, clearUser])
 
-    // use effect para ptra cosa
     useEffect(() => {
-
         if (!dispositivo?.dev_num_ser) return
 
-        // funcion para obtener la lectua mas reciente por id dispositivo
         async function fetchLectura() {
             try {
-                const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/response/consultarLecturaRecientePorDevice/${dispositivo?.dev_num_ser}`, {
+                const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/response/consultarLecturaRecientePorDevice/${dispositivo.dev_num_ser}`, {
                     method: 'GET',
                     credentials: 'include'
                 })
@@ -91,10 +146,9 @@ export default function PageInfoCompletaDispositivo() {
             }
         }
 
-        // feth de obtener lecturas de este dispositiv
         async function fetchLecturasDispositivio() {
             try {
-                const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/response//obtenerLecturasPorEUI/${dispositivo?.dev_num_ser}`, {
+                const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/response//obtenerLecturasPorEUI/${dispositivo.dev_num_ser}`, {
                     method: 'GET',
                     credentials: 'include'
                 })
@@ -109,7 +163,7 @@ export default function PageInfoCompletaDispositivo() {
                     setLecturas(data)
                     setLoadingLecturas(false)
                 } else {
-                    toast.error("Error al obtener la lecturas")
+                    toast.error("Error al obtener las lecturas")
                     setLoadingLecturas(false)
                 }
             } catch (error) {
@@ -120,88 +174,62 @@ export default function PageInfoCompletaDispositivo() {
 
         fetchLectura()
         fetchLecturasDispositivio()
-    }, [dispositivo])
+    }, [dispositivo, clearUser])
 
-    // use effect que dara la funcion una vez que haya lecturas
-    useEffect(() => {
-        if (lecturas.length <= 0) return
+    const lecturasUltimos30Dias = useMemo(() => {
+        return filtrarLecturasUltimos30Dias(lecturas);
+    }, [lecturas]);
 
-        function obtenerConsumo30Dias(lecturas: Lectura[]) {
+    const consumoUltimos30Dias = useMemo(() => {
+        return obtenerConsumoUltimos30Dias(lecturas);
+    }, [lecturas]);
 
-            // Ordenadas de más nueva → más vieja
-            const ordenadas = [...lecturas].sort((a, b) => {
-                const fa = a.received_at ? new Date(a.received_at).getTime() : 0;
-                const fb = b.received_at ? new Date(b.received_at).getTime() : 0;
-                return fb - fa
-            });
-
-            const lecturaActual = ordenadas[0]; // la más reciente
-
-            // Fecha objetivo -30 días
-            const hace30 = new Date();
-            hace30.setDate(hace30.getDate() - 30);
-
-            // Buscar lectura más antigua que hace 30 días
-            const lectura30 = ordenadas.find((l) => {
-                if (!l.received_at) return false;
-                return new Date(l.received_at) <= hace30;
-            })
-
-            // Si no hay lectura 30 días atrás → usar la más vieja
-            const lecturaComparativa =
-                lectura30 || ordenadas[ordenadas.length - 1];
-
-            const volActual = lecturaActual.cumulative_water_volume ?? 0;
-            const volComparativo = lecturaComparativa.cumulative_water_volume ?? 0;
-
-
-            // Cálculo del consumo
-            const consumo = volActual - volComparativo;
-
-            return consumo
-        }
-
-        setConsumoMes(obtenerConsumo30Dias(lecturas))
-
-    }, [lecturas])
-
+    const textoRango = useMemo(() => {
+        return obtenerTextoRangoUltimos30Dias();
+    }, []);
 
     return (
         <div>
-            {loadingDispositivo || loadingRespuesta || loadingLecturas ? (<TriangleLoader />) : (
+            {loadingDispositivo || loadingRespuesta || loadingLecturas ? (
+                <TriangleLoader />
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 w-full gap-5">
 
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 w-full  gap-5">
-
-                    { /** columna izquierda */}
                     <div className="grid grid-rows-1 w-full gap-3">
-
                         <div>
                             <Image src={"/imgs/logoCentenario.jpg"} width={500} height={100} alt="logo" />
                         </div>
 
-                        <div className="w-full h-fit flex flex-col gap-2 rounded-2xl bg-gray-200 p-7">
-                            <Label className="text-3xl font-bold">Consumo:  </Label>
+                        <div className="w-full h-fit flex flex-col gap-3 rounded-2xl bg-gray-200 p-7">
+                            <Label className="text-3xl font-bold">Consumo</Label>
+                            <Label className="text-base text-gray-600">{textoRango}</Label>
 
-                            <BarChartConsumo lecturas={lecturas} />
+                            <BarChartConsumo
+                                lecturas={lecturasUltimos30Dias}
+                                titulo="Consumo de los últimos 30 días"
+                                subtitulo="Visualización diaria del consumo hasta hoy"
+                                footerTexto="Periodo móvil de 30 días"
+                            />
                         </div>
-
-
                     </div>
 
-                    {/** COLUMANA DERECHA */}
                     <div className="grid grid-rows-1 w-full gap-8">
                         <div className="w-full h-fit flex flex-col gap-5 rounded-2xl p-3">
 
-                            <div className="w-full h-fit flex flex-col gap-2 rounded-2xl bg-gray-200 p-3">
-                                <Label className="text-3xl font-bold">MEDIDOR: {dispositivo?.dev_nombre?.toUpperCase()} </Label>
+                            <div className="w-full h-fit flex flex-col gap-2 rounded-2xl bg-gray-200 p-4">
+                                <Label className="text-3xl font-bold">
+                                    MEDIDOR: {dispositivo?.dev_nombre?.toUpperCase()}
+                                </Label>
 
                                 <div className="mt-1">
-                                    <Label className="text-2xl">Numero de serie: {dispositivo?.dev_num_ser}</Label>
+                                    <Label className="text-2xl">
+                                        Número de serie: {dispositivo?.dev_num_ser}
+                                    </Label>
                                 </div>
                             </div>
 
-                            <div className="w-full h-fit flex flex-col gap-2 rounded-2xl bg-gray-200 p-3">
-                                <Label className="text-3xl font-bold">Ubicación:  </Label>
+                            <div className="w-full h-fit flex flex-col gap-2 rounded-2xl bg-gray-200 p-4">
+                                <Label className="text-3xl font-bold">Ubicación</Label>
 
                                 <div className="mt-1">
                                     <Label className="text-2xl">Latitud: {dispositivo?.dev_lat}</Label>
@@ -212,45 +240,47 @@ export default function PageInfoCompletaDispositivo() {
                                 </div>
                             </div>
 
-                            <div className="rounded-2xl bg-gray-200 p-3">
+                            <div className="rounded-2xl bg-gray-200 p-4">
+                                <Label className="text-3xl font-bold">Resumen al día de hoy</Label>
 
-                                <Label className="text-3xl font-bold">Información general:</Label>
-
-                                <div className="mt-1">
-                                    <Label className="text-2xl">Ultima Lectura: {lectura?.cumulative_water_volume}</Label>
+                                <div className="mt-3">
+                                    <Label className="text-2xl">
+                                        Última lectura: {lectura?.cumulative_water_volume}
+                                    </Label>
                                 </div>
 
-                                <div className="mt-1">
-                                    <Label className="text-2xl">Fecha y hora de ultima lectura: {convertirFechaConHora(lectura?.received_at)}</Label>
+                                <div className="mt-3">
+                                    <Label className="text-2xl">
+                                        Fecha y hora de última lectura: {convertirFechaConHora(lectura?.received_at)}
+                                    </Label>
                                 </div>
 
-                                <div className="mt-1">
-                                    <Label className="text-2xl">Consumo del mes: {Number((consumoMes).toFixed(2))}</Label>
+                                <div className="mt-3">
+                                    <Label className="text-2xl">
+                                        Consumo de los últimos 30 días: {Number(consumoUltimos30Dias.toFixed(2))}
+                                    </Label>
                                 </div>
 
-                                <div className="mt-1">
-                                    <Label className="text-2xl">Temperatura del agua ( Centigrados ): {lectura?.water_temperature}</Label>
+                                <div className="mt-3">
+                                    <Label className="text-2xl">
+                                        Temperatura del agua (°C): {lectura?.water_temperature}
+                                    </Label>
                                 </div>
 
-                                <div className="mt-1">
-                                    <Label className="text-2xl">Estado de la valvula: {lectura ? (lectura.valve_is_open ? 'Abierto' : (lectura.valve_is_closed ? 'Cerrada' : "Error")) : ' - '}</Label>
+                                <div className="mt-3">
+                                    <Label className="text-2xl">
+                                        Estado de la válvula: {lectura ? (lectura.valve_is_open ? 'Abierta' : (lectura.valve_is_closed ? 'Cerrada' : "Error")) : ' - '}
+                                    </Label>
                                 </div>
 
-                                <div className="mt-1">
-                                    <Label className="text-2xl">Flujo instanteno del agua: {lectura?.instantaneous_flow}</Label>
+                                <div className="mt-3">
+                                    <Label className="text-2xl">
+                                        Flujo instantáneo del agua: {lectura?.instantaneous_flow}
+                                    </Label>
                                 </div>
-
-
                             </div>
-
-
-
-
                         </div>
-
-
                     </div>
-
                 </div>
             )}
         </div>

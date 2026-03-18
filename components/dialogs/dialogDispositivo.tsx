@@ -77,7 +77,7 @@ export default function DialogDispositivo({ dispositivo, open, setOpen }: Dialog
 
                         </div>) : (
                             <>
-                                <DialogTitle className="text-2xl"> Informacion del {dispositivo.dev_nombre}</DialogTitle>
+                                <DialogTitle className="text-2xl"> Información del {dispositivo.dev_nombre}</DialogTitle>
 
                                 <div className="w-full grid grid-cols-2 gap-2.5">
 
@@ -87,22 +87,22 @@ export default function DialogDispositivo({ dispositivo, open, setOpen }: Dialog
                                     </div>
 
                                     <div className="flex-col">
-                                        <section className="font-bold"> Num. serie </section>
+                                        <section className="font-bold"> Núm. serie </section>
                                         <section> {dispositivo.dev_num_ser}</section>
                                     </div>
 
                                     <div className="flex-col">
-                                        <section className="font-bold"> Flujo del agua </section>
+                                        <section className="font-bold"> Flujo de agua </section>
                                         <section> {respuesta ? respuesta.instantaneous_flow : ' - '}</section>
                                     </div>
 
                                     <div className="flex-col">
-                                        <section className="font-bold"> Estado valvula </section>
+                                        <section className="font-bold"> Estado válvula </section>
                                         <section> {respuesta ? (respuesta.valve_is_open ? 'Abierto' : (respuesta.valve_is_closed ? 'Cerrada' : "Error")) : ' - '}</section>
                                     </div>
 
                                     <div className="flex-col">
-                                        <section className="font-bold"> Temperatura agua ( Centigrados ) </section>
+                                        <section className="font-bold"> Temperatura del agua ( °C ) </section>
                                         <section>{respuesta ? respuesta.water_temperature : ' - '}</section>
                                     </div>
 
@@ -115,13 +115,13 @@ export default function DialogDispositivo({ dispositivo, open, setOpen }: Dialog
                                     <div className="flex gap-5 justify-between">
                                         <Button variant={'blue'} onClick={() => router.push(`/dispositivos/${dispositivo.dev_id}/infoCompleta`)}>
                                             <FileChartColumn />
-                                            Ver información completa
+                                            Ver información al dia de hoy
                                         </Button>
 
 
                                         <Button variant={'blue'} onClick={() => router.push(`/dispositivos/${dispositivo.dev_id}/infoPeriodo`)}>
                                             <CalendarRange />
-                                            Ver información periodo
+                                            Ver información del periodo
                                         </Button>
                                     </div>
 

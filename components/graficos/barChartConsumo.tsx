@@ -4,7 +4,6 @@ import { Bar, BarChart, CartesianGrid, LabelList, XAxis } from "recharts"
 import {
     Card,
     CardContent,
-    CardDescription,
     CardFooter,
     CardHeader,
     CardTitle,
@@ -19,6 +18,9 @@ import { Lectura } from "@/zod/sensorReading-schema"
 
 type BarChartConsumoProps = {
     lecturas: Lectura[]
+    titulo?: string
+    subtitulo?: string
+    footerTexto?: string
 }
 
 const chartConfig = {
@@ -28,25 +30,37 @@ const chartConfig = {
     },
 } satisfies ChartConfig
 
-export function BarChartConsumo({ lecturas }: BarChartConsumoProps) {
+export function BarChartConsumo({
+    lecturas,
+    titulo = "Consumo diario de agua",
+    subtitulo = "Visualización de consumo por día",
+    footerTexto = "Consumo diario del periodo mostrado",
+}: BarChartConsumoProps) {
 
     const data = lecturas
         .filter((lectura) => lectura.received_at && lectura.yesterday_cumulative_water_volume != null)
         .map((lectura) => {
-            const fecha = new Date(lectura.received_at ?? "")
+            const fechaReal = new Date(lectura.received_at ?? "")
+
             return {
-                fecha: fecha.toLocaleDateString("default", { month: "short", day: "numeric" }),
-                consumo: lectura.yesterday_cumulative_water_volume,
+                fechaReal,
+                fecha: fechaReal.toLocaleDateString("es-MX", {
+                    month: "short",
+                    day: "numeric",
+                }),
+                consumo: Number(lectura.yesterday_cumulative_water_volume ?? 0),
             }
         })
-        .slice(0, 31)
+        .sort((a, b) => a.fechaReal.getTime() - b.fechaReal.getTime())
+        .slice(-30)
 
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Consumo diario de agua</CardTitle>
-                <CardDescription>Visualización de consumo por día</CardDescription>
+                <CardTitle>{titulo}</CardTitle>
+                <p className="text-sm text-muted-foreground">{subtitulo}</p>
             </CardHeader>
+
             <CardContent>
                 <ChartContainer config={chartConfig}>
                     <BarChart
@@ -89,7 +103,7 @@ export function BarChartConsumo({ lecturas }: BarChartConsumoProps) {
                 <div className="flex w-full items-start gap-2 text-sm">
                     <div className="grid gap-2">
                         <div className="text-muted-foreground flex items-center gap-2 leading-none">
-                            Consumo diario mes
+                            {footerTexto}
                         </div>
                     </div>
                 </div>
